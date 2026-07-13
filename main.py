@@ -8,35 +8,23 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from groq import Groq
 from pydantic import BaseModel, Field
-
-# ---------------------------------------------------------------------------
-# Logging — never log context or question content, only shape/metadata.
-# ---------------------------------------------------------------------------
+ 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("soma_ai")
 
 app = FastAPI(title="Soma Health AI API")
 
-# ---------------------------------------------------------------------------
-# CORS — restrict to real frontend origins via env var before production use.
-# ALLOWED_ORIGINS is a comma-separated list, e.g.
-#   ALLOWED_ORIGINS=https://doctor-app-domain.com,https://citizen-app-domain.com
-# Falls back to "*" only when nothing is configured, so local/demo use keeps
-# working — set ALLOWED_ORIGINS on Render before going further than a demo.
 _allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "").strip()
 ALLOWED_ORIGINS = [o.strip() for o in _allowed_origins_env.split(",") if o.strip()] or ["*"]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=False,  # never combine allow_credentials=True with a wildcard origin
+    allow_credentials=False,   
     allow_methods=["POST", "GET"],
     allow_headers=["Content-Type"],
 )
-
-# ---------------------------------------------------------------------------
-# Request / response models
-# ---------------------------------------------------------------------------
+ 
 Platform = Literal["doctor", "citizen", "government"]
 
 
@@ -173,11 +161,7 @@ def contains_unsafe_content(text: str) -> bool:
     lowered = text.lower()
     return any(pattern in lowered for pattern in UNSAFE_PATTERNS)
 
-
-# ---------------------------------------------------------------------------
-# Very small in-memory rate limiter — good enough for a single-instance demo.
-# Keyed by client IP: max N requests per rolling window.
-# ---------------------------------------------------------------------------
+ 
 RATE_LIMIT_MAX_REQUESTS = int(os.getenv("RATE_LIMIT_MAX_REQUESTS", "20"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
 _request_log: Dict[str, Deque[float]] = defaultdict(deque)
@@ -196,11 +180,7 @@ def check_rate_limit(client_id: str) -> None:
         )
     log.append(now)
 
-
-# ---------------------------------------------------------------------------
-# Groq client — created once, with a request timeout so a hung upstream call
-# can't hang the API worker indefinitely.
-# ---------------------------------------------------------------------------
+ 
 GROQ_TIMEOUT_SECONDS = float(os.getenv("GROQ_TIMEOUT_SECONDS", "30"))
 MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.1-8b-instant")
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "700"))
