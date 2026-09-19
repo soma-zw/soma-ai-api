@@ -155,6 +155,7 @@ def check_rate_limit(client_id: str) -> None:
 # It is never sent to the browser.
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://bkrnfcsmufaloquciykr.supabase.co").rstrip("/")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJrcm5mY3NtdWZhbG9xdWNpeWtyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4MTE5NTgsImV4cCI6MjEwNTM4Nzk1OH0.MXMkNOVQXkwOpN8g-VM-8hDGuDrmP6A_CRFRP4JMWdQ").strip()
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 
 if not SUPABASE_SERVICE_ROLE_KEY:
     logger.warning("SUPABASE_SERVICE_ROLE_KEY is not configured; authenticated AI requests will fail.")
