@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("soma_ai")
 
-app = FastAPI(title="Soma Health AI API")
+app = FastAPI(title="Soma AI API")
 
 _allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "").strip()
 ALLOWED_ORIGINS = [o.strip() for o in _allowed_origins_env.split(",") if o.strip()] or ["*"]
@@ -25,7 +25,7 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
  
-Platform = Literal["doctor", "citizen", "government"]
+Platform = Literal["page", "assistant"]
 
 
 class AIRequest(BaseModel):
@@ -35,125 +35,65 @@ class AIRequest(BaseModel):
 
 
 DISCLAIMERS: Dict[str, str] = {
-    "doctor": "AI-generated draft. Clinical review required.",
-    "citizen": "This explanation is informational and does not replace advice from a qualified healthcare professional.",
-    "government": "This brief is generated from the supplied aggregate data only and may not reflect real-time conditions.",
+    "assistant": "This is a draft to help you — review and rework it before you submit anything as your own work.",
 }
 
 PROMPTS: Dict[str, str] = {
-    "doctor": """
-You are Soma AI, a clinical documentation assistant for qualified healthcare professionals
-using the Soma Health platform.
+    "page": """
+You are Soma AI, the sidebar assistant in the Soma student browser.
 
-You will be given a JSON "context" object. It always includes:
-- current_page: which page of the app the doctor is looking at (dashboard, schedule,
-  pharmacy, or patients)
-- signed_in_doctor: the doctor's name, specialty and hospital
-- page_data: the data relevant to that page — e.g. today's queue and performance stats on
-  the dashboard; internal and partner-pharmacy drug stock and locations on the pharmacy
-  page; department rosters and appointments on the schedule page; or the single currently
-  unlocked patient record (vitals, allergies, medications, fracture/imaging history,
-  medical history entries, risk factors, brain findings) on the patients page.
+You are given a JSON "context" object describing the page currently open in the browser —
+typically its title, url, and the page's visible text content (and possibly a user-selected
+excerpt the student highlighted).
 
-Answer the doctor's question using ONLY the supplied context. Adapt to whichever page_data
-is present:
-- On the dashboard: answer questions about today's queue, patient counts, consultation
-  times, and forecasts.
-- On pharmacy: answer questions about current stock levels (internal and partner-network),
-  which partner pharmacy currently holds a given drug, and which pharmacies are nearby,
-  using the addresses/coordinates supplied.
-- On schedule: summarize rosters, appointments, and workload across doctors/departments.
-- On patients: summarize the unlocked patient's medical history, organize diagnoses,
-  medications, allergies, investigations and procedures, draft referral letters, discharge
-  summaries or consultation notes, and highlight missing information.
-
-You may:
-- summarize, organize, and cross-reference the supplied data;
-- draft referral letters, discharge summaries and consultation notes from patient data;
-- identify missing information that requires professional review;
-- answer general operational questions about the current page (stock, schedule, queue).
+Answer the student's question using ONLY the supplied page context. You may:
+- explain, summarize, or simplify what's on the page;
+- define terms or concepts that appear on the page;
+- answer direct questions about the page's content;
+- help the student understand something confusing on the page.
 
 You must not:
-- make a diagnosis;
-- recommend, prescribe, stop or change medication;
-- suggest treatment or lifestyle interventions;
-- invent information not present in the supplied context;
-- replace the judgment of a qualified healthcare professional.
+- answer questions unrelated to the page by inventing information not present in the
+  context;
+- pretend to know things the page context doesn't actually contain.
 
-If the context does not contain what is needed to answer, say so plainly rather than
-guessing. When information is missing, state "Not recorded" rather than inventing it.
-Keep the response concise, structured and factual.
+If the question can't be answered from the supplied page content, say so plainly rather
+than guessing, and suggest what the student could look up instead. Keep answers short and
+conversational — this is a sidebar, not an essay.
 """,
-    "citizen": """
-You are Soma AI, a patient-information assistant.
+    "assistant": """
+You are Soma AI, the home assistant in the Soma student browser — a general, ChatGPT-style
+companion that knows the student across the conversation.
 
-Explain only the supplied health information in clear and simple language.
+You are given a JSON "context" object that may include the student's profile (name,
+grade/school), recent conversation history, and other Soma account data. Use it to stay
+consistent and personable — don't reset context every message, and don't ask the student to
+re-explain things already present in context.
 
-You may:
-- explain medical terminology;
-- explain laboratory results;
-- explain diagnoses already recorded by a healthcare professional;
-- explain prescriptions and instructions already present in the record;
-- summarize appointment, referral or discharge information.
+You help with schoolwork, general questions, planning, and everyday assistant tasks.
 
-You must not:
-- diagnose;
-- prescribe;
-- recommend changing or stopping medication;
-- invent information;
-- create treatment plans;
-- replace advice from a qualified healthcare professional.
+For homework, essays, or assignments specifically:
+- You may draft, outline, solve, or write full attempts when asked — don't refuse or water
+  down the help.
+- Always make clear the result is a draft/starting point for the student to review, revise,
+  and put in their own words before handing it in — never suggest it should be copied or
+  submitted as-is.
+- If asked to help the student cheat on something happening live (an in-progress test or
+  exam), decline that specifically and offer to help them prepare instead.
 
-When information is incomplete, say that it is incomplete. Use calm, accessible language
-and avoid unnecessary medical jargon.
-""",
-    "government": """
-You are Soma AI, a public-health intelligence assistant.
-
-Analyze only anonymized and aggregated health data supplied in the request.
-
-You may:
-- summarize disease trends;
-- compare regions;
-- identify facility pressure;
-- summarize medicine demand;
-- explain vaccination coverage;
-- identify unusual changes in aggregate indicators;
-- produce concise policy briefs.
-
-You must not:
-- infer identities;
-- request personally identifiable patient data;
-- invent statistics;
-- claim causation unless supported by the supplied data;
-- hide uncertainty or data limitations;
-- call something an outbreak unless the supplied data explicitly confirms it.
-
-Structure the response under exactly these headings:
-1. Observed Data
-2. Interpretation
-3. Limitations
-4. Recommended Review
+Keep the tone warm and conversational, like a knowledgeable friend rather than a formal
+report generator.
 """,
 }
 
-UNSAFE_PATTERNS = [
-    "stop taking",
-    "increase your dose",
-    "decrease your dose",
-    "you have been diagnosed",
-    "i recommend this treatment",
-    "you definitely have",
-    "you should take",
-    "start taking",
-    "change your medication",
-    "switch to",
-]
+# No content is auto-withheld for the browser platforms yet — the medical unsafe-pattern
+# list doesn't apply here. Add phrases below if you want specific responses blocked (e.g.
+# patterns indicating exam-cheating help), matching against the lowercased answer text.
+UNSAFE_PATTERNS: list[str] = []
 
 WITHHELD_MESSAGE: Dict[str, str] = {
-    "doctor": "The AI response was withheld because it may contain unsupported clinical advice. Please review the source record manually.",
-    "citizen": "Soma AI could not safely explain this record. Please contact a qualified healthcare professional.",
-    "government": "The AI response was withheld because the supplied data was insufficient for a reliable interpretation.",
+    "page": "Soma AI couldn't safely answer that from the page content.",
+    "assistant": "Soma AI couldn't safely answer that — try rephrasing the question.",
 }
 
 
@@ -182,9 +122,19 @@ def check_rate_limit(client_id: str) -> None:
 
  
 GROQ_TIMEOUT_SECONDS = float(os.getenv("GROQ_TIMEOUT_SECONDS", "30"))
-MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.1-8b-instant")
+# llama-3.1-8b-instant was deprecated for free/developer-tier Groq accounts on 2026-08-16
+# (moved to Enterprise-only). gpt-oss-20b is the closest same-tier replacement: fast,
+# cheap, 131K context. Swap MODEL_NAME to "openai/gpt-oss-120b" via env var for higher
+# quality at ~half the speed.
+MODEL_NAME = os.getenv("MODEL_NAME", "openai/gpt-oss-20b")
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "700"))
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0.2"))
+# GPT-OSS models reason internally before answering, and that hidden reasoning is drawn
+# from the same MAX_TOKENS budget — a low limit can leave nothing for the actual answer.
+# "low" keeps reasoning brief (closer to the old model's latency); "hidden" means the
+# response only contains the final answer, not the reasoning trace.
+REASONING_EFFORT = os.getenv("REASONING_EFFORT", "low")
+REASONING_FORMAT = os.getenv("REASONING_FORMAT", "hidden")
 
 _client: Optional[Groq] = None
 
@@ -201,7 +151,7 @@ def get_client() -> Groq:
 
 @app.get("/")
 def home():
-    return {"service": "Soma Health AI API", "status": "online"}
+    return {"service": "Soma AI API", "status": "online"}
 
 
 @app.get("/health")
@@ -238,6 +188,8 @@ def ask_ai(request: AIRequest, http_request: Request):
             ],
             temperature=TEMPERATURE,
             max_tokens=MAX_TOKENS,
+            reasoning_effort=REASONING_EFFORT,
+            reasoning_format=REASONING_FORMAT,
         )
         answer = (completion.choices[0].message.content or "").strip()
     except Exception as error:  # noqa: BLE001 — deliberately broad, converted to a safe 502
