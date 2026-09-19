@@ -6,6 +6,7 @@ from typing import Deque, Dict, Literal, Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from groq import Groq
 from pydantic import BaseModel, Field
  
@@ -24,6 +25,22 @@ app.add_middleware(
     allow_methods=["POST", "GET"],
     allow_headers=["Content-Type"],
 )
+
+
+# A truly unhandled exception (anything not raised as an HTTPException) would
+# otherwise escape FastAPI's normal response path entirely and come back with
+# NO CORS headers attached — the browser then reports it as a CORS/connection
+# failure instead of showing the real error, which is exactly what happened
+# here. This catch-all guarantees every response — including bugs we haven't
+# hit yet — is valid, CORS-safe JSON, and the real traceback still goes to
+# the Render logs either way.
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception("unhandled_error path=%s error=%s", request.url.path, type(exc).__name__)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Soma AI hit an unexpected error. Please try again."},
+    )
  
 Platform = Literal["page", "assistant"]
 
